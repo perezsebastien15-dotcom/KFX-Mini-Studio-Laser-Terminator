@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Potard comme dans l'appli : piste 270°, valeur à 75 %, centre (54,54), rayon 26 (zone sûre = 33) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- piste -->
+    <path android:strokeColor="#40FF2E97" android:strokeWidth="6" android:strokeLineCap="round"
+        android:pathData="M35.615,72.385A26,26 0,1 1,72.385 72.385" />
+    <!-- halo néon (faux glow : trait large semi-transparent) -->
+    <path android:strokeColor="#55FF2E97" android:strokeWidth="12" android:strokeLineCap="round"
+        android:pathData="M35.615,72.385A26,26 0,1 1,78.02 44.05" />
+    <!-- valeur -->
+    <path android:strokeColor="#FF2E97" android:strokeWidth="6" android:strokeLineCap="round"
+        android:pathData="M35.615,72.385A26,26 0,1 1,78.02 44.05" />
+    <!-- corps du bouton -->
+    <path android:fillColor="#2A1450" android:strokeColor="#00F0FF" android:strokeWidth="1.5"
+        android:pathData="M54,37a17,17 0,1 1,0 34a17,17 0,1 1,0 -34z" />
+    <!-- index -->
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="3.5" android:strokeLineCap="round"
+        android:pathData="M54,54L66.01,49.03" />
+</vector>
