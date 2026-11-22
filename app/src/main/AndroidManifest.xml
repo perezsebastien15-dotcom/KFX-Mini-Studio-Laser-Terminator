@@ -4,6 +4,7 @@
     <uses-feature android:name="android.software.midi" android:required="true" />
 
     <application
+        android:icon="@mipmap/ic_launcher"
         android:label="Neon Knobs"
         android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
         <activity
