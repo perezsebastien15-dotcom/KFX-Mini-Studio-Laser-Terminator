@@ -3,13 +3,16 @@ package com.kooyu.neonknobs
 import android.app.Activity
 import android.app.AlertDialog
 import android.animation.ValueAnimator
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorFilter
 import android.graphics.LinearGradient
 import android.graphics.Paint
-import android.graphics.Path
+import android.graphics.Matrix
 import android.graphics.PixelFormat
+import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
@@ -21,6 +24,7 @@ import android.media.midi.MidiManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
@@ -34,6 +38,8 @@ import android.widget.Toast
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.math.sin
 
 class MainActivity : Activity() {
@@ -68,9 +74,7 @@ class MainActivity : Activity() {
         root.addView(status)
 
         for (row in 0..1) {
-            if (row == 1) root.addView(configBar(), LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { gravity = Gravity.CENTER_HORIZONTAL })
+            if (row == 1) root.addView(configBar())
             val line = LinearLayout(this)
             for (col in 0..5) {
                 val i = row * 6 + col
@@ -87,7 +91,7 @@ class MainActivity : Activity() {
             }
             root.addView(line, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         }
-        wave = WaveOverlay(this)
+        wave = WaveOverlay(this, root)
         setContentView(FrameLayout(this).apply { addView(root); addView(wave) })
         if (configs().length() == 0) saveConfig(currentConfig(), animate = false) // 1er lancement : l'état actuel devient "Défaut"
         updateStatus()
@@ -165,14 +169,14 @@ class MainActivity : Activity() {
             setShadowLayer(8 * d, 0f, 0f, neon)
             setPadding((18 * d).toInt(), (6 * d).toInt(), (18 * d).toInt(), (6 * d).toInt())
             background = GradientDrawable().apply {
-                setColor(Color.parseColor("#CC1A0B2E")); setStroke((2 * d).toInt(), neon); cornerRadius = 40 * d
+                setColor(Color.parseColor("#CC1A0B2E")); cornerRadius = 40 * d
             }
         }
         configName = pill("", KnobView.NEON[1]).apply { setOnClickListener { pickConfig(it) } }
         showConfigName()
         val save = pill("💾", KnobView.NEON[0]).apply { setOnClickListener { askSaveConfig() } }
-        return LinearLayout(this).apply {
-            setPadding(0, (4 * d).toInt(), 0, (4 * d).toInt())
+        return RgbBar(this).apply {
+            setPadding(0, (8 * d).toInt(), 0, (8 * d).toInt())
             addView(configName)
             addView(save, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
@@ -284,46 +288,83 @@ class MainActivity : Activity() {
     }
 }
 
-/** Vague néon qui balaie l'écran de gauche à droite (enregistrement / chargement de config). */
-private class WaveOverlay(context: android.content.Context) : View(context) {
+/**
+ * Vague invisible : une ondulation qui traverse l'écran de gauche à droite (enregistrement / chargement de config).
+ * On photographie l'écran puis on redessine la bande de la vague en colonnes décalées, comme vue à travers de l'eau.
+ */
+private class WaveOverlay(context: android.content.Context, private val target: View) : View(context) {
     private var t = -1f
+    private var shot: Bitmap? = null
     private val dp = resources.displayMetrics.density
-    private val path = Path()
-    private val trail = Paint()
-    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 4 * dp }
-    private val colors = intArrayOf(0xFFFF2E97.toInt(), 0xFFBC13FE.toInt(), 0xFF00F0FF.toInt())
-
-    init { setLayerType(LAYER_TYPE_SOFTWARE, null) } // pour le halo setShadowLayer
+    private val src = Rect()
+    private val dst = RectF()
+    private val paint = Paint(Paint.FILTER_BITMAP_FLAG)
 
     fun play() {
+        if (target.width == 0 || shot != null) return
+        shot = Bitmap.createBitmap(target.width, target.height, Bitmap.Config.ARGB_8888).also { target.draw(Canvas(it)) }
         ValueAnimator.ofFloat(0f, 1f).apply {
             duration = 1200
-            addUpdateListener { t = it.animatedValue as Float; invalidate() }
+            addUpdateListener {
+                t = it.animatedValue as Float
+                if (t >= 1f) { shot?.recycle(); shot = null }
+                invalidate()
+            }
             start()
         }
     }
 
     override fun onDraw(canvas: Canvas) {
-        if (t <= 0f || t >= 1f) return
-        val w = width.toFloat()
-        val h = height.toFloat()
-        val band = w * 0.25f
+        val bmp = shot ?: return
+        val w = bmp.width
+        val h = bmp.height.toFloat()
+        val band = w * 0.3f
         val front = -band + t * (w + 2 * band)
-        trail.shader = LinearGradient(front - band, 0f, front, 0f,
-            Color.TRANSPARENT, Color.argb(110, 255, 46, 151), Shader.TileMode.CLAMP)
-        canvas.drawRect(front - band, 0f, front, h, trail)
-        colors.forEachIndexed { j, c ->
-            path.reset()
-            var y = 0f
-            while (y <= h) {
-                val x = front - j * 18 * dp + 30 * dp * sin(y / h * 12.6f + t * 20f + j).toFloat()
-                if (y == 0f) path.moveTo(x, y) else path.lineTo(x, y)
-                y += 6 * dp
-            }
-            line.color = c
-            line.setShadowLayer(14 * dp, 0f, 0f, c)
-            canvas.drawPath(path, line)
+        val strip = (3 * dp).toInt().coerceAtLeast(1)
+        val amp = 14 * dp
+        var x = (front - band).toInt().coerceAtLeast(0)
+        val end = (front + band).toInt().coerceAtMost(w)
+        while (x < end) {
+            val d = (x + strip / 2f - front) / band // -1..1 dans la bande
+            val env = (1 - d * d).let { it * it }    // 0 aux bords, 1 au centre : pas de cassure
+            val a = d * 3 * PI
+            val sx = (x + amp * env * sin(a)).toInt().coerceIn(0, w - strip)
+            val dy = amp * 0.5f * env * cos(a).toFloat()
+            src.set(sx, 0, sx + strip, bmp.height)
+            dst.set(x.toFloat(), dy, (x + strip).toFloat(), h + dy)
+            canvas.drawBitmap(bmp, src, dst, paint)
+            x += strip
         }
+    }
+}
+
+/** Ligne RVB animée de bord à bord, qui fait le tour de la zone nom de config + sauvegarde. */
+private class RgbBar(context: android.content.Context) : LinearLayout(context) {
+    private val dp = resources.displayMetrics.density
+    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2 * dp }
+    private val shift = Matrix()
+    private val box = RectF()
+
+    init { gravity = Gravity.CENTER; setWillNotDraw(false) }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        line.shader = LinearGradient(0f, 0f, w.toFloat(), 0f,
+            intArrayOf(Color.RED, Color.GREEN, Color.BLUE, Color.RED), null, Shader.TileMode.REPEAT)
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        if (childCount == 0) return
+        val first = getChildAt(0)
+        val last = getChildAt(childCount - 1)
+        box.set(first.left.toFloat(), first.top.toFloat(), last.right.toFloat(), last.bottom.toFloat())
+        box.inset(-10 * dp, -5 * dp)
+        shift.setTranslate(SystemClock.uptimeMillis() % 4000 / 4000f * width, 0f) // le dégradé défile : 1 tour en 4 s
+        line.shader?.setLocalMatrix(shift)
+        val y = height / 2f
+        canvas.drawLine(0f, y, box.left, y, line)
+        canvas.drawRoundRect(box, box.height() / 2, box.height() / 2, line)
+        canvas.drawLine(box.right, y, width.toFloat(), y, line)
+        postInvalidateOnAnimation()
     }
 }
 
