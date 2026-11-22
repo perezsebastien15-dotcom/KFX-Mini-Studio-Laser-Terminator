@@ -13,7 +13,14 @@ Installation : ouvrir le fichier sur la tablette, autoriser « sources inconnues
 1. Brancher la tablette au PC en USB, notification USB → **MIDI**.
 2. Le PC voit « Android USB Peripheral Port » (rien à installer).
 3. Cakewalk : Préférences → MIDI → Devices → cocher le port en entrée, puis assigner les potards.
-4. Glisser haut/bas = valeur. Tap sur un potard = changer son nom et son CC. Tout est sauvegardé à la fermeture.
+4. Potards :
+   - tourner le doigt autour = valeur (sens horaire = monte) ;
+   - tap = nom + CC ;
+   - double tap sur le potard = couleur suivante (rose, cyan, jaune, vert, orange, rouge, bleu, violet) ;
+   - double tap sur le nom = renommer.
+5. Configs (barre au milieu) : ▼ = choisir une config (chargée direct), 💾 = enregistrer sous un nom (même nom = écrase).
+   Une config garde noms, CC, couleurs et positions ; au chargement les positions ne sont pas envoyées au PC.
+6. Tout est sauvegardé à la fermeture.
 
 ## Publier une nouvelle version
 

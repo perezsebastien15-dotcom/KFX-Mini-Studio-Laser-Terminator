@@ -2,15 +2,18 @@ package com.kooyu.neonknobs
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.animation.ValueAnimator
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorFilter
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.PixelFormat
 import android.graphics.Shader
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
 import android.media.midi.MidiDevice
 import android.media.midi.MidiDeviceInfo
 import android.media.midi.MidiInputPort
@@ -23,15 +26,22 @@ import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
 import android.widget.EditText
+import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.IOException
+import kotlin.math.sin
 
 class MainActivity : Activity() {
 
     private val knobs = mutableListOf<KnobView>()
     private lateinit var status: TextView
+    private lateinit var configName: TextView
+    private lateinit var wave: WaveOverlay
     private val prefs by lazy { getPreferences(MODE_PRIVATE) }
 
     private val main = Handler(Looper.getMainLooper())
@@ -58,23 +68,28 @@ class MainActivity : Activity() {
         root.addView(status)
 
         for (row in 0..1) {
+            if (row == 1) root.addView(configBar(), LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { gravity = Gravity.CENTER_HORIZONTAL })
             val line = LinearLayout(this)
-            val neon = if (row == 0) Color.parseColor("#FF2E97") else Color.parseColor("#00F0FF")
             for (col in 0..5) {
                 val i = row * 6 + col
-                val knob = KnobView(this, neon).apply {
+                val knob = KnobView(this, prefs.getInt("col$i", KnobView.NEON[row])).apply {
                     name = prefs.getString("name$i", null) ?: "Potard ${i + 1}"
                     cc = prefs.getInt("cc$i", 20 + i) // Potard 1 = CC 20 … Potard 12 = CC 31
                     value = prefs.getInt("val$i", 0)
                     onValueChange = { sendCc(it.cc, it.value) }
-                    onEdit = ::editKnob
+                    onEdit = { editKnob(it, withCc = true) }
+                    onRename = { editKnob(it, withCc = false) }
                 }
                 knobs += knob
                 line.addView(knob, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
             }
             root.addView(line, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         }
-        setContentView(root)
+        wave = WaveOverlay(this)
+        setContentView(FrameLayout(this).apply { addView(root); addView(wave) })
+        if (configs().length() == 0) saveConfig(currentConfig(), animate = false) // 1er lancement : l'état actuel devient "Défaut"
         updateStatus()
         startMidi()
     }
@@ -93,7 +108,7 @@ class MainActivity : Activity() {
         super.onPause()
         prefs.edit().apply {
             knobs.forEachIndexed { i, k ->
-                putString("name$i", k.name); putInt("cc$i", k.cc); putInt("val$i", k.value)
+                putString("name$i", k.name); putInt("cc$i", k.cc); putInt("val$i", k.value); putInt("col$i", k.color)
             }
         }.apply()
     }
@@ -106,8 +121,8 @@ class MainActivity : Activity() {
 
     // ---------- Réglages ----------
 
-    private fun editKnob(k: KnobView) {
-        val nameField = EditText(this).apply { setText(k.name); hint = "Nom"; setSingleLine() }
+    private fun editKnob(k: KnobView, withCc: Boolean) {
+        val nameField = EditText(this).apply { setText(k.name); hint = "Nom"; setSingleLine(); selectAll() }
         val ccField = EditText(this).apply {
             setText(k.cc.toString()); hint = "CC (0-127)"; inputType = InputType.TYPE_CLASS_NUMBER
         }
@@ -115,7 +130,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             val p = (20 * resources.displayMetrics.density).toInt()
             setPadding(p, p / 2, p, 0)
-            addView(nameField); addView(ccField)
+            addView(nameField); if (withCc) addView(ccField)
         }
         AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
             .setTitle("Potard ${knobs.indexOf(k) + 1}")
@@ -128,9 +143,92 @@ class MainActivity : Activity() {
                 }
                 k.name = nameField.text.toString().trim().ifEmpty { k.name }
                 k.cc = cc
+                k.playRainbow()
             }
             .setNegativeButton("Annuler", null)
             .show()
+    }
+
+    // ---------- Configurations ----------
+    // Stockées en JSON dans les prefs : { "nom": [ {n, cc, c, v} x12 ] }
+
+    private fun configs() = JSONObject(prefs.getString("configs", null) ?: "{}")
+    private fun currentConfig() = prefs.getString("current", null) ?: "Défaut"
+
+    private fun configBar(): View {
+        val d = resources.displayMetrics.density
+        fun pill(t: String, neon: Int) = TextView(this).apply {
+            text = t
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            textSize = 16f
+            setTextColor(Color.WHITE)
+            setShadowLayer(8 * d, 0f, 0f, neon)
+            setPadding((18 * d).toInt(), (6 * d).toInt(), (18 * d).toInt(), (6 * d).toInt())
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#CC1A0B2E")); setStroke((2 * d).toInt(), neon); cornerRadius = 40 * d
+            }
+        }
+        configName = pill("", KnobView.NEON[1]).apply { setOnClickListener { pickConfig(it) } }
+        showConfigName()
+        val save = pill("💾", KnobView.NEON[0]).apply { setOnClickListener { askSaveConfig() } }
+        return LinearLayout(this).apply {
+            setPadding(0, (4 * d).toInt(), 0, (4 * d).toInt())
+            addView(configName)
+            addView(save, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { marginStart = (10 * d).toInt() })
+        }
+    }
+
+    private fun showConfigName() { configName.text = "${currentConfig()}  ▼" }
+
+    private fun pickConfig(anchor: View) {
+        val names = configs().keys().asSequence().sortedBy { it.lowercase() }.toList()
+        PopupMenu(this, anchor).apply {
+            names.forEach { menu.add(it) }
+            setOnMenuItemClickListener { loadConfig(it.title.toString()); true }
+            show()
+        }
+    }
+
+    private fun askSaveConfig() {
+        val field = EditText(this).apply { setText(currentConfig()); hint = "Nom de la config"; setSingleLine(); selectAll() }
+        val form = FrameLayout(this).apply {
+            val p = (20 * resources.displayMetrics.density).toInt()
+            setPadding(p, p / 2, p, 0)
+            addView(field)
+        }
+        AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
+            .setTitle("Enregistrer la config")
+            .setView(form)
+            .setPositiveButton("Enregistrer") { _, _ ->
+                val name = field.text.toString().trim()
+                if (name.isEmpty()) Toast.makeText(this, "Donne-lui un nom", Toast.LENGTH_SHORT).show()
+                else saveConfig(name) // même nom = écrase
+            }
+            .setNegativeButton("Annuler", null)
+            .show()
+    }
+
+    private fun saveConfig(name: String, animate: Boolean = true) {
+        val knobsJson = JSONArray()
+        knobs.forEach { knobsJson.put(JSONObject().put("n", it.name).put("cc", it.cc).put("c", it.color).put("v", it.value)) }
+        prefs.edit().putString("configs", configs().put(name, knobsJson).toString()).putString("current", name).apply()
+        showConfigName()
+        if (animate) wave.play()
+    }
+
+    // Les valeurs reviennent à l'écran sans être envoyées au PC, comme au démarrage de l'appli.
+    private fun loadConfig(name: String) {
+        val a = configs().optJSONArray(name) ?: return
+        knobs.forEachIndexed { i, k ->
+            val o = a.optJSONObject(i) ?: return@forEachIndexed
+            k.name = o.optString("n", k.name); k.cc = o.optInt("cc", k.cc)
+            k.color = o.optInt("c", k.color); k.value = o.optInt("v", k.value)
+        }
+        prefs.edit().putString("current", name).apply()
+        showConfigName()
+        wave.play()
     }
 
     // ---------- MIDI ----------
@@ -183,6 +281,49 @@ class MainActivity : Activity() {
         val ok = port != null
         status.text = error ?: if (ok) "● USB MIDI connecté" else "○ USB MIDI déconnecté — branche le PC et choisis USB : MIDI"
         status.setTextColor(if (ok) Color.parseColor("#39FF14") else Color.parseColor("#FFB000"))
+    }
+}
+
+/** Vague néon qui balaie l'écran de gauche à droite (enregistrement / chargement de config). */
+private class WaveOverlay(context: android.content.Context) : View(context) {
+    private var t = -1f
+    private val dp = resources.displayMetrics.density
+    private val path = Path()
+    private val trail = Paint()
+    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 4 * dp }
+    private val colors = intArrayOf(0xFFFF2E97.toInt(), 0xFFBC13FE.toInt(), 0xFF00F0FF.toInt())
+
+    init { setLayerType(LAYER_TYPE_SOFTWARE, null) } // pour le halo setShadowLayer
+
+    fun play() {
+        ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 1200
+            addUpdateListener { t = it.animatedValue as Float; invalidate() }
+            start()
+        }
+    }
+
+    override fun onDraw(canvas: Canvas) {
+        if (t <= 0f || t >= 1f) return
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val band = w * 0.25f
+        val front = -band + t * (w + 2 * band)
+        trail.shader = LinearGradient(front - band, 0f, front, 0f,
+            Color.TRANSPARENT, Color.argb(110, 255, 46, 151), Shader.TileMode.CLAMP)
+        canvas.drawRect(front - band, 0f, front, h, trail)
+        colors.forEachIndexed { j, c ->
+            path.reset()
+            var y = 0f
+            while (y <= h) {
+                val x = front - j * 18 * dp + 30 * dp * sin(y / h * 12.6f + t * 20f + j).toFloat()
+                if (y == 0f) path.moveTo(x, y) else path.lineTo(x, y)
+                y += 6 * dp
+            }
+            line.color = c
+            line.setShadowLayer(14 * dp, 0f, 0f, c)
+            canvas.drawPath(path, line)
+        }
     }
 }
 
