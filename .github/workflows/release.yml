@@ -24,3 +24,21 @@ jobs:
       - run: gh release create "v$APP_VERSION" NeonKnobs.apk --target "$GITHUB_SHA" --title "Neon Knobs $APP_VERSION" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
+      # Remplace le contenu du même fichier Drive : le lien partagé ne change jamais.
+      # Ignoré tant que les secrets GDRIVE_* ne sont pas configurés.
+      - name: Upload Drive
+        env:
+          CLIENT_ID: ${{ secrets.GDRIVE_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          REFRESH_TOKEN: ${{ secrets.GDRIVE_REFRESH_TOKEN }}
+          FILE_ID: 1rniDHdH8_bmf9HW2E-oYrN8qXeLLfZYq
+        run: |
+          if [ -z "$REFRESH_TOKEN" ]; then echo "Secrets GDRIVE_* absents, upload Drive ignoré"; exit 0; fi
+          TOKEN=$(curl -sSf https://oauth2.googleapis.com/token \
+            -d client_id="$CLIENT_ID" -d client_secret="$CLIENT_SECRET" \
+            -d refresh_token="$REFRESH_TOKEN" -d grant_type=refresh_token | jq -r .access_token)
+          curl -sSf -X PATCH -o /dev/null \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/vnd.android.package-archive" \
+            --data-binary @NeonKnobs.apk \
+            "https://www.googleapis.com/upload/drive/v3/files/$FILE_ID?uploadType=media"
+          echo "Drive mis à jour : https://drive.google.com/file/d/$FILE_ID/view"

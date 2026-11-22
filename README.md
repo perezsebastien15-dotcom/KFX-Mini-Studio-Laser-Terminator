@@ -17,4 +17,4 @@ Installation : ouvrir le fichier sur la tablette, autoriser « sources inconnues
 
 ## Publier une nouvelle version
 
-Onglet **Actions** → **Release** → **Run workflow**. L'APK part dans une Release, le lien ci-dessus pointe toujours sur la dernière.
+Onglet **Actions** → **Release** → **Run workflow**. L'APK part dans une Release (le lien ci-dessus pointe toujours sur la dernière) et remplace le fichier Drive partagé, dont le lien ne change pas.
