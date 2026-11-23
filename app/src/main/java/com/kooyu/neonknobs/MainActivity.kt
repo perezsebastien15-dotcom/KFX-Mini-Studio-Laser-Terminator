@@ -47,7 +47,7 @@ class MainActivity : Activity() {
 
     private val knobs = mutableListOf<KnobView>()
     // 2 banks par ligne, 24 mémoires {n, cc, c, v} : 0-11 = bank A / switch OFF (CC 20-31), 12-23 = bank B / switch ON (CC 32-43).
-    // CC, valeur et couleur sont propres à chaque mémoire ; le nom est commun au potard (recopié dans ses 2 mémoires).
+    // Nom, CC, valeur et couleur sont propres à chaque mémoire (chaque CC a les siens).
     private val slots = Array(24) { JSONObject() }
     private val switchOn = BooleanArray(2)
     private val switches = mutableListOf<RowSwitch>()
@@ -118,7 +118,7 @@ class MainActivity : Activity() {
             }
             root.addView(line, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         }
-        knobs.indices.forEach { showLook(it); show(it) }
+        knobs.indices.forEach(::show)
         applyStyle(prefs.getBoolean("realistic", false))
         wave = WaveOverlay(this, root)
         setContentView(FrameLayout(this).apply { addView(root); addView(wave) })
@@ -156,19 +156,13 @@ class MainActivity : Activity() {
 
     private fun store(k: Int) {
         val v = knobs[k]
-        slots[slotOf(k)].put("cc", v.cc).put("v", v.value).put("c", v.color)
-        for (j in intArrayOf(k, k + 12)) slots[j].put("n", v.name)
+        slots[slotOf(k)] = JSONObject().put("n", v.name).put("cc", v.cc).put("c", v.color).put("v", v.value)
     }
 
-    /** CC, valeur et couleur de la bank active. */
+    /** Nom, CC, valeur et couleur de la bank active. */
     private fun show(k: Int) {
         val o = slots[slotOf(k)]
-        knobs[k].apply { cc = o.getInt("cc"); value = o.getInt("v"); color = o.getInt("c") }
-    }
-
-    /** Nom, commun aux 2 banks (on prend celui de la bank affichée). */
-    private fun showLook(k: Int) {
-        knobs[k].name = slots[slotOf(k)].getString("n")
+        knobs[k].apply { name = o.getString("n"); cc = o.getInt("cc"); color = o.getInt("c"); value = o.getInt("v") }
     }
 
     /** Interne à l'appli : bascule la ligne de bank (CC + valeurs), rien n'est envoyé en MIDI. */
@@ -301,7 +295,7 @@ class MainActivity : Activity() {
         val a = configs().optJSONArray(name) ?: return
         // les configs d'avant les switchs n'ont que 12 mémoires : les 12 "switch ON" restent telles quelles
         for (j in slots.indices) a.optJSONObject(j)?.let { slots[j] = it }
-        knobs.indices.forEach { showLook(it); show(it) }
+        knobs.indices.forEach(::show)
         prefs.edit().putString("current", name).apply()
         showConfigName()
         wave.play()
