@@ -20,9 +20,7 @@ Installation : ouvrir le fichier sur la tablette, autoriser « sources inconnues
    - double tap sur le nom = renommer.
 5. Barre du milieu : ▼ = choisir une config (chargée direct), 💾 = enregistrer sous un nom (même nom = écrase), 🎨 = style néon / réaliste.
    Une config garde noms, CC, couleurs et positions ; au chargement les positions ne sont pas envoyées au PC.
-6. Switch à gauche de chaque ligne (témoin allumé = ON) : bascule les CC de la ligne, sans rien envoyer en MIDI.
-   - Ligne 1 : OFF = CC 20-25, ON = CC 32-37. Ligne 2 : OFF = CC 26-31, ON = CC 38-43.
-   - Chaque position a sa propre mémoire (nom, couleur, valeur) : 24 mémoires en tout, enregistrées aussi dans les configs.
+6. Switch à gauche de chaque ligne (témoin allumé = ON) : OFF éteint les potards de la ligne et les bloque, sans toucher à leurs valeurs ; ON les rallume tels quels. Rien n'est envoyé en MIDI.
 7. Tout est sauvegardé à la fermeture.
 
 ## Publier une nouvelle version

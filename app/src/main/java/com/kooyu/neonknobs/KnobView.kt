@@ -88,15 +88,25 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
         }
     }
 
+    // Ligne coupée par son switch : éclairage éteint, potard bloqué (onTouchEvent), valeur gardée.
+    override fun setEnabled(enabled: Boolean) { super.setEnabled(enabled); invalidate() }
+
+    /** Rayon du halo néon : 0 = pas de halo quand l'éclairage est coupé. */
+    private fun halo(radius: Float) = if (isEnabled) radius else 0f
+
     override fun onDraw(canvas: Canvas) {
-        val c = if (rainbow < 0) color else Color.HSVToColor(floatArrayOf(rainbow * 720f % 360f, 1f, 1f))
+        val c = when {
+            !isEnabled -> mix(color, 0xFF141418.toInt(), 0.8f)
+            rainbow < 0 -> color
+            else -> Color.HSVToColor(floatArrayOf(rainbow * 720f % 360f, 1f, 1f))
+        }
         if (realistic) return drawRealistic(canvas, c)
         text.typeface = neonFont
         track.color = Color.argb(60, Color.red(c), Color.green(c), Color.blue(c))
         glow.color = c
-        glow.setShadowLayer(12 * dp, 0f, 0f, c)
-        text.color = if (rainbow < 0) Color.WHITE else c
-        text.setShadowLayer(8 * dp, 0f, 0f, c)
+        glow.setShadowLayer(halo(12 * dp), 0f, 0f, c)
+        text.color = if (!isEnabled) Color.GRAY else if (rainbow < 0) Color.WHITE else c
+        text.setShadowLayer(halo(8 * dp), 0f, 0f, c)
 
         val textSize = layout()
         val stroke = r * 0.16f
@@ -150,7 +160,7 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
         for (i in 0..20) {
             val f = i / 20f
             val a = Math.toRadians(135.0 + 270.0 * f)
-            val on = f <= lit + 0.001f
+            val on = isEnabled && f <= lit + 0.001f
             line.color = if (on) c else Color.argb(90, 200, 200, 210)
             if (on) line.setShadowLayer(6 * dp, 0f, 0f, c) else line.clearShadowLayer()
             canvas.drawLine(
@@ -205,7 +215,7 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
         val rn = rc * 0.62f
         fill.shader = RadialGradient(cx, cy, rn, intArrayOf(mix(c, Color.WHITE, 0.55f), c, mix(c, Color.BLACK, 0.45f)),
             floatArrayOf(0f, 0.6f, 1f), Shader.TileMode.CLAMP)
-        fill.setShadowLayer(r * 0.18f, 0f, 0f, c)
+        fill.setShadowLayer(halo(r * 0.18f), 0f, 0f, c)
         canvas.drawCircle(cx, cy, rn, fill)
         fill.clearShadowLayer()
         fill.shader = RadialGradient(cx - rn * 0.3f, cy - rn * 0.45f, rn * 0.6f,
@@ -215,10 +225,10 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
 
         // textes façon sérigraphie
         text.typeface = realFont
-        text.color = c
-        text.setShadowLayer(4 * dp, 0f, 0f, c)
+        text.color = if (isEnabled) c else Color.GRAY
+        text.setShadowLayer(halo(4 * dp), 0f, 0f, c)
         canvas.drawText(value.toString(), cx, textSize * 1.1f, text)
-        text.color = if (rainbow < 0) 0xFFE6E6EA.toInt() else c
+        text.color = if (!isEnabled) Color.GRAY else if (rainbow < 0) 0xFFE6E6EA.toInt() else c
         text.setShadowLayer(2 * dp, 0f, 1 * dp, Color.BLACK)
         canvas.drawText(name, cx, cy + r + textSize * 1.3f, text)
     }
@@ -243,6 +253,7 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
+        if (!isEnabled) return true // ligne coupée : on avale le geste, rien ne bouge
         gestures.onTouchEvent(e)
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {

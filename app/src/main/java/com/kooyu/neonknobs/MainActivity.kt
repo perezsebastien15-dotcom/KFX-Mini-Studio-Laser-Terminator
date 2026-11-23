@@ -46,9 +46,6 @@ import kotlin.math.sin
 class MainActivity : Activity() {
 
     private val knobs = mutableListOf<KnobView>()
-    // 24 mémoires {n, cc, c, v} : 0-11 = switch OFF (CC 20-31), 12-23 = switch ON (CC 32-43)
-    private val slots = Array(24) { JSONObject() }
-    private val switchOn = BooleanArray(2)
     private val switches = mutableListOf<RowSwitch>()
     private lateinit var status: TextView
     private lateinit var configName: TextView
@@ -78,27 +75,23 @@ class MainActivity : Activity() {
         }
         root.addView(status)
 
-        for (j in 0 until 24) {
-            val k = j % 12
-            slots[j] = JSONObject()
-                .put("n", prefs.getString("name$j", null) ?: "Potard ${k + 1}")
-                .put("cc", prefs.getInt("cc$j", 20 + j)) // OFF : potard 1 = CC 20 … 12 = CC 31 · ON : potard 1 = CC 32 … 12 = CC 43
-                .put("c", prefs.getInt("col$j", KnobView.NEON[k / 6]))
-                .put("v", prefs.getInt("val$j", 0))
-        }
         for (row in 0..1) {
-            switchOn[row] = prefs.getBoolean("sw$row", false)
             if (row == 1) root.addView(configBar())
             val line = LinearLayout(this)
             val sw = RowSwitch(this).apply {
-                on = switchOn[row]
                 contentDescription = "Switch ligne ${row + 1}"
-                setOnClickListener { toggleRow(row) }
+                setOnClickListener { setRowOn(row, !on) }
             }
             switches += sw
             line.addView(sw, LinearLayout.LayoutParams((72 * resources.displayMetrics.density).toInt(), LinearLayout.LayoutParams.MATCH_PARENT))
+            // shortcut: la 1.0.6 avait 2 mémoires par potard (switch OFF/ON) ; on reprend celle qui était affichée
+            val mem = if (prefs.getBoolean("sw$row", false)) 12 else 0
             for (col in 0..5) {
-                val knob = KnobView(this, KnobView.NEON[row]).apply {
+                val i = row * 6 + col
+                val knob = KnobView(this, prefs.getInt("col${i + mem}", KnobView.NEON[row])).apply {
+                    name = prefs.getString("name${i + mem}", null) ?: "Potard ${i + 1}"
+                    cc = prefs.getInt("cc${i + mem}", 20 + i) // Potard 1 = CC 20 … Potard 12 = CC 31
+                    value = prefs.getInt("val${i + mem}", 0)
                     onValueChange = { sendCc(it.cc, it.value) }
                     onEdit = { editKnob(it, withCc = true) }
                     onRename = { editKnob(it, withCc = false) }
@@ -108,7 +101,7 @@ class MainActivity : Activity() {
             }
             root.addView(line, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         }
-        knobs.indices.forEach(::show)
+        for (row in 0..1) setRowOn(row, prefs.getBoolean("on$row", true))
         applyStyle(prefs.getBoolean("realistic", false))
         wave = WaveOverlay(this, root)
         setContentView(FrameLayout(this).apply { addView(root); addView(wave) })
@@ -129,38 +122,19 @@ class MainActivity : Activity() {
     // onPause est toujours appelé avant que l'appli soit fermée/tuée
     override fun onPause() {
         super.onPause()
-        knobs.indices.forEach(::store)
         prefs.edit().apply {
-            slots.forEachIndexed { j, o ->
-                putString("name$j", o.getString("n")); putInt("cc$j", o.getInt("cc"))
-                putInt("val$j", o.getInt("v")); putInt("col$j", o.getInt("c"))
+            knobs.forEachIndexed { i, k ->
+                putString("name$i", k.name); putInt("cc$i", k.cc); putInt("val$i", k.value); putInt("col$i", k.color)
             }
-            putBoolean("sw0", switchOn[0]); putBoolean("sw1", switchOn[1])
+            remove("sw0"); remove("sw1") // migration 1.0.6 faite
+            putBoolean("on0", switches[0].on); putBoolean("on1", switches[1].on)
         }.apply()
     }
 
-    // ---------- Switchs de ligne ----------
-    // Le potard à l'écran affiche la mémoire active ; on recopie avant de basculer.
-
-    private fun slotOf(k: Int) = k + if (switchOn[k / 6]) 12 else 0
-
-    private fun store(k: Int) {
-        val v = knobs[k]
-        slots[slotOf(k)] = JSONObject().put("n", v.name).put("cc", v.cc).put("c", v.color).put("v", v.value)
-    }
-
-    private fun show(k: Int) {
-        val o = slots[slotOf(k)]
-        knobs[k].apply { name = o.getString("n"); cc = o.getInt("cc"); color = o.getInt("c"); value = o.getInt("v") }
-    }
-
-    /** Interne à l'appli : change juste les CC (et noms/couleurs/valeurs) de la ligne, rien n'est envoyé en MIDI. */
-    private fun toggleRow(row: Int) {
-        val ks = row * 6 until row * 6 + 6
-        ks.forEach(::store)
-        switchOn[row] = !switchOn[row]
-        ks.forEach(::show)
-        switches[row].on = switchOn[row]
+    /** Switch interne à l'appli : OFF = potards de la ligne éteints et bloqués, valeurs gardées. Rien n'est envoyé en MIDI. */
+    private fun setRowOn(row: Int, on: Boolean) {
+        switches[row].on = on
+        for (k in row * 6 until row * 6 + 6) knobs[k].isEnabled = on
     }
 
     override fun onDestroy() {
@@ -183,7 +157,7 @@ class MainActivity : Activity() {
             addView(nameField); if (withCc) addView(ccField)
         }
         AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
-            .setTitle("Potard ${knobs.indexOf(k) + 1}" + if (switchOn[knobs.indexOf(k) / 6]) " · switch ON" else "")
+            .setTitle("Potard ${knobs.indexOf(k) + 1}")
             .setView(form)
             .setPositiveButton("OK") { _, _ ->
                 val cc = ccField.text.toString().toIntOrNull()
@@ -272,8 +246,8 @@ class MainActivity : Activity() {
     }
 
     private fun saveConfig(name: String, animate: Boolean = true) {
-        knobs.indices.forEach(::store)
-        val knobsJson = JSONArray(slots.toList()) // les 2 positions de switch, 24 mémoires
+        val knobsJson = JSONArray()
+        knobs.forEach { knobsJson.put(JSONObject().put("n", it.name).put("cc", it.cc).put("c", it.color).put("v", it.value)) }
         prefs.edit().putString("configs", configs().put(name, knobsJson).toString()).putString("current", name).apply()
         showConfigName()
         if (animate) wave.play()
@@ -282,9 +256,12 @@ class MainActivity : Activity() {
     // Les valeurs reviennent à l'écran sans être envoyées au PC, comme au démarrage de l'appli.
     private fun loadConfig(name: String) {
         val a = configs().optJSONArray(name) ?: return
-        // les configs d'avant les switchs n'ont que 12 mémoires : les 12 "switch ON" restent telles quelles
-        for (j in slots.indices) a.optJSONObject(j)?.let { slots[j] = it }
-        knobs.indices.forEach(::show)
+        // les configs faites en 1.0.6 ont 24 mémoires : on prend les 12 premières
+        knobs.forEachIndexed { i, k ->
+            val o = a.optJSONObject(i) ?: return@forEachIndexed
+            k.name = o.optString("n", k.name); k.cc = o.optInt("cc", k.cc)
+            k.color = o.optInt("c", k.color); k.value = o.optInt("v", k.value)
+        }
         prefs.edit().putString("current", name).apply()
         showConfigName()
         wave.play()
