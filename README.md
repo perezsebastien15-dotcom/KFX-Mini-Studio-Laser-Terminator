@@ -1,10 +1,10 @@
-# KooyuFX 24
+# KFX — Kooyu FX Mini Studio Laser Terminator
 
 Contrôleur MIDI USB Android pour Cakewalk, fait pour Kooyu : 12 potards × 2 banks = 24 CC assignables (CC 20 à 43, canal 1), style néon ou réaliste.
 
 ## Télécharger l'APK
 
-**[⬇ KooyuFX24.apk (dernière version)](https://github.com/perezsebastien15-dotcom/NeonKnobs/releases/latest/download/KooyuFX24.apk)**
+**[⬇ KFX.apk (dernière version)](https://github.com/perezsebastien15-dotcom/KFX-Mini-Studio-Laser-Terminator/releases/latest/download/KFX.apk)**
 
 Installation : ouvrir le fichier sur la tablette, autoriser « sources inconnues ».
 

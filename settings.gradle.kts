@@ -5,5 +5,5 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories { google(); mavenCentral() }
 }
-rootProject.name = "KooyuFX24"
+rootProject.name = "KFX"
 include(":app")
