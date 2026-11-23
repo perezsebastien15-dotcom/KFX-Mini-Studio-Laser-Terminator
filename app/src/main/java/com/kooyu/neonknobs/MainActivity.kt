@@ -72,6 +72,15 @@ class MainActivity : Activity() {
             val p = (12 * resources.displayMetrics.density).toInt()
             setPadding(p, p / 2, p, p)
         }
+        root.addView(TextView(this).apply {
+            text = "Kooyu FX Mini Studio Laser Terminator"
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            gravity = Gravity.CENTER
+            textSize = 20f
+            letterSpacing = 0.08f
+            setTextColor(Color.WHITE)
+            setShadowLayer(10 * resources.displayMetrics.density, 0f, 0f, KnobView.NEON[0])
+        })
         status = TextView(this).apply {
             typeface = Typeface.MONOSPACE
             gravity = Gravity.CENTER
