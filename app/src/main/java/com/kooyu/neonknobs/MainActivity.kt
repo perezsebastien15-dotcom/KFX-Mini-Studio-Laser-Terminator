@@ -47,7 +47,7 @@ class MainActivity : Activity() {
 
     private val knobs = mutableListOf<KnobView>()
     // 2 banks par ligne, 24 mémoires {n, cc, c, v} : 0-11 = bank A / switch OFF (CC 20-31), 12-23 = bank B / switch ON (CC 32-43).
-    // CC et valeur sont propres à chaque mémoire ; nom et couleur sont communs au potard (recopiés dans ses 2 mémoires).
+    // CC, valeur et couleur sont propres à chaque mémoire ; le nom est commun au potard (recopié dans ses 2 mémoires).
     private val slots = Array(24) { JSONObject() }
     private val switchOn = BooleanArray(2)
     private val switches = mutableListOf<RowSwitch>()
@@ -147,20 +147,19 @@ class MainActivity : Activity() {
 
     private fun store(k: Int) {
         val v = knobs[k]
-        slots[slotOf(k)].put("cc", v.cc).put("v", v.value)
-        for (j in intArrayOf(k, k + 12)) slots[j].put("n", v.name).put("c", v.color)
+        slots[slotOf(k)].put("cc", v.cc).put("v", v.value).put("c", v.color)
+        for (j in intArrayOf(k, k + 12)) slots[j].put("n", v.name)
     }
 
-    /** CC + valeur de la bank active. */
+    /** CC, valeur et couleur de la bank active. */
     private fun show(k: Int) {
         val o = slots[slotOf(k)]
-        knobs[k].apply { cc = o.getInt("cc"); value = o.getInt("v") }
+        knobs[k].apply { cc = o.getInt("cc"); value = o.getInt("v"); color = o.getInt("c") }
     }
 
-    /** Nom + couleur, communs aux 2 banks (on prend ceux de la bank affichée). */
+    /** Nom, commun aux 2 banks (on prend celui de la bank affichée). */
     private fun showLook(k: Int) {
-        val o = slots[slotOf(k)]
-        knobs[k].apply { name = o.getString("n"); color = o.getInt("c") }
+        knobs[k].name = slots[slotOf(k)].getString("n")
     }
 
     /** Interne à l'appli : bascule la ligne de bank (CC + valeurs), rien n'est envoyé en MIDI. */
