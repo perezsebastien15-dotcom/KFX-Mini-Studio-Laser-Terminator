@@ -1,10 +1,10 @@
-# Neon Knobs
+# KooyuFX 24
 
-Contrôleur MIDI USB Android pour Cakewalk : 12 potards néon (CC 20 à 31, canal 1), style retro wave.
+Contrôleur MIDI USB Android pour Cakewalk, fait pour Kooyu : 12 potards × 2 banks = 24 CC assignables (CC 20 à 43, canal 1), style néon ou réaliste.
 
 ## Télécharger l'APK
 
-**[⬇ NeonKnobs.apk (dernière version)](https://github.com/perezsebastien15-dotcom/NeonKnobs/releases/latest/download/NeonKnobs.apk)**
+**[⬇ KooyuFX24.apk (dernière version)](https://github.com/perezsebastien15-dotcom/NeonKnobs/releases/latest/download/KooyuFX24.apk)**
 
 Installation : ouvrir le fichier sur la tablette, autoriser « sources inconnues ».
 
