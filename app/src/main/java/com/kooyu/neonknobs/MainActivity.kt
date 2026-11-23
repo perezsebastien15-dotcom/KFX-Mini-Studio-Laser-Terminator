@@ -46,6 +46,10 @@ import kotlin.math.sin
 class MainActivity : Activity() {
 
     private val knobs = mutableListOf<KnobView>()
+    // 24 mémoires {n, cc, c, v} : 0-11 = switch OFF (CC 20-31), 12-23 = switch ON (CC 32-43)
+    private val slots = Array(24) { JSONObject() }
+    private val switchOn = BooleanArray(2)
+    private val switches = mutableListOf<RowSwitch>()
     private lateinit var status: TextView
     private lateinit var configName: TextView
     private lateinit var wave: WaveOverlay
@@ -74,15 +78,27 @@ class MainActivity : Activity() {
         }
         root.addView(status)
 
+        for (j in 0 until 24) {
+            val k = j % 12
+            slots[j] = JSONObject()
+                .put("n", prefs.getString("name$j", null) ?: "Potard ${k + 1}")
+                .put("cc", prefs.getInt("cc$j", 20 + j)) // OFF : potard 1 = CC 20 … 12 = CC 31 · ON : potard 1 = CC 32 … 12 = CC 43
+                .put("c", prefs.getInt("col$j", KnobView.NEON[k / 6]))
+                .put("v", prefs.getInt("val$j", 0))
+        }
         for (row in 0..1) {
+            switchOn[row] = prefs.getBoolean("sw$row", false)
             if (row == 1) root.addView(configBar())
             val line = LinearLayout(this)
+            val sw = RowSwitch(this).apply {
+                on = switchOn[row]
+                contentDescription = "Switch ligne ${row + 1}"
+                setOnClickListener { toggleRow(row) }
+            }
+            switches += sw
+            line.addView(sw, LinearLayout.LayoutParams((72 * resources.displayMetrics.density).toInt(), LinearLayout.LayoutParams.MATCH_PARENT))
             for (col in 0..5) {
-                val i = row * 6 + col
-                val knob = KnobView(this, prefs.getInt("col$i", KnobView.NEON[row])).apply {
-                    name = prefs.getString("name$i", null) ?: "Potard ${i + 1}"
-                    cc = prefs.getInt("cc$i", 20 + i) // Potard 1 = CC 20 … Potard 12 = CC 31
-                    value = prefs.getInt("val$i", 0)
+                val knob = KnobView(this, KnobView.NEON[row]).apply {
                     onValueChange = { sendCc(it.cc, it.value) }
                     onEdit = { editKnob(it, withCc = true) }
                     onRename = { editKnob(it, withCc = false) }
@@ -92,6 +108,7 @@ class MainActivity : Activity() {
             }
             root.addView(line, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         }
+        knobs.indices.forEach(::show)
         applyStyle(prefs.getBoolean("realistic", false))
         wave = WaveOverlay(this, root)
         setContentView(FrameLayout(this).apply { addView(root); addView(wave) })
@@ -112,11 +129,38 @@ class MainActivity : Activity() {
     // onPause est toujours appelé avant que l'appli soit fermée/tuée
     override fun onPause() {
         super.onPause()
+        knobs.indices.forEach(::store)
         prefs.edit().apply {
-            knobs.forEachIndexed { i, k ->
-                putString("name$i", k.name); putInt("cc$i", k.cc); putInt("val$i", k.value); putInt("col$i", k.color)
+            slots.forEachIndexed { j, o ->
+                putString("name$j", o.getString("n")); putInt("cc$j", o.getInt("cc"))
+                putInt("val$j", o.getInt("v")); putInt("col$j", o.getInt("c"))
             }
+            putBoolean("sw0", switchOn[0]); putBoolean("sw1", switchOn[1])
         }.apply()
+    }
+
+    // ---------- Switchs de ligne ----------
+    // Le potard à l'écran affiche la mémoire active ; on recopie avant de basculer.
+
+    private fun slotOf(k: Int) = k + if (switchOn[k / 6]) 12 else 0
+
+    private fun store(k: Int) {
+        val v = knobs[k]
+        slots[slotOf(k)] = JSONObject().put("n", v.name).put("cc", v.cc).put("c", v.color).put("v", v.value)
+    }
+
+    private fun show(k: Int) {
+        val o = slots[slotOf(k)]
+        knobs[k].apply { name = o.getString("n"); cc = o.getInt("cc"); color = o.getInt("c"); value = o.getInt("v") }
+    }
+
+    /** Interne à l'appli : change juste les CC (et noms/couleurs/valeurs) de la ligne, rien n'est envoyé en MIDI. */
+    private fun toggleRow(row: Int) {
+        val ks = row * 6 until row * 6 + 6
+        ks.forEach(::store)
+        switchOn[row] = !switchOn[row]
+        ks.forEach(::show)
+        switches[row].on = switchOn[row]
     }
 
     override fun onDestroy() {
@@ -139,7 +183,7 @@ class MainActivity : Activity() {
             addView(nameField); if (withCc) addView(ccField)
         }
         AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
-            .setTitle("Potard ${knobs.indexOf(k) + 1}")
+            .setTitle("Potard ${knobs.indexOf(k) + 1}" + if (switchOn[knobs.indexOf(k) / 6]) " · switch ON" else "")
             .setView(form)
             .setPositiveButton("OK") { _, _ ->
                 val cc = ccField.text.toString().toIntOrNull()
@@ -228,8 +272,8 @@ class MainActivity : Activity() {
     }
 
     private fun saveConfig(name: String, animate: Boolean = true) {
-        val knobsJson = JSONArray()
-        knobs.forEach { knobsJson.put(JSONObject().put("n", it.name).put("cc", it.cc).put("c", it.color).put("v", it.value)) }
+        knobs.indices.forEach(::store)
+        val knobsJson = JSONArray(slots.toList()) // les 2 positions de switch, 24 mémoires
         prefs.edit().putString("configs", configs().put(name, knobsJson).toString()).putString("current", name).apply()
         showConfigName()
         if (animate) wave.play()
@@ -238,11 +282,9 @@ class MainActivity : Activity() {
     // Les valeurs reviennent à l'écran sans être envoyées au PC, comme au démarrage de l'appli.
     private fun loadConfig(name: String) {
         val a = configs().optJSONArray(name) ?: return
-        knobs.forEachIndexed { i, k ->
-            val o = a.optJSONObject(i) ?: return@forEachIndexed
-            k.name = o.optString("n", k.name); k.cc = o.optInt("cc", k.cc)
-            k.color = o.optInt("c", k.color); k.value = o.optInt("v", k.value)
-        }
+        // les configs d'avant les switchs n'ont que 12 mémoires : les 12 "switch ON" restent telles quelles
+        for (j in slots.indices) a.optJSONObject(j)?.let { slots[j] = it }
+        knobs.indices.forEach(::show)
         prefs.edit().putString("current", name).apply()
         showConfigName()
         wave.play()
@@ -378,6 +420,55 @@ private class RgbBar(context: android.content.Context) : LinearLayout(context) {
         canvas.drawRoundRect(box, box.height() / 2, box.height() / 2, line)
         canvas.drawLine(box.right, y, width.toFloat(), y, line)
         postInvalidateOnAnimation()
+    }
+}
+
+/** Petit bouton poussoir avec témoin lumineux au-dessus. */
+private class RowSwitch(context: android.content.Context) : View(context) {
+    var on = false
+        set(v) { field = v; isSelected = v; invalidate() }
+    private val dp = resources.displayMetrics.density
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val rect = RectF()
+
+    init {
+        setLayerType(LAYER_TYPE_SOFTWARE, null) // halo du témoin
+        isClickable = true
+    }
+
+    override fun setPressed(pressed: Boolean) { super.setPressed(pressed); invalidate() }
+
+    override fun onDraw(canvas: Canvas) {
+        val cx = width / 2f
+        val size = minOf(width * 0.66f, height * 0.4f)
+        val cy = height / 2f + size * 0.3f
+
+        // témoin
+        val ly = cy - size * 0.95f
+        val lr = size * 0.2f
+        if (on) {
+            paint.shader = RadialGradient(cx - lr * 0.3f, ly - lr * 0.3f, lr * 1.3f, Color.WHITE, 0xFFFF1744.toInt(), Shader.TileMode.CLAMP)
+            paint.setShadowLayer(10 * dp, 0f, 0f, 0xFFFF1744.toInt())
+        } else {
+            paint.shader = RadialGradient(cx - lr * 0.3f, ly - lr * 0.3f, lr * 1.3f, 0xFF5A1E26.toInt(), 0xFF1E0A0D.toInt(), Shader.TileMode.CLAMP)
+        }
+        canvas.drawCircle(cx, ly, lr, paint)
+        paint.clearShadowLayer()
+
+        // poussoir : socle noir + capuchon qui s'enfonce quand on appuie
+        val h = size / 2
+        rect.set(cx - h, cy - h, cx + h, cy + h)
+        paint.shader = null
+        paint.color = 0xFF0A0A0C.toInt()
+        paint.setShadowLayer(6 * dp, 0f, 3 * dp, Color.argb(180, 0, 0, 0))
+        canvas.drawRoundRect(rect, size * 0.2f, size * 0.2f, paint)
+        paint.clearShadowLayer()
+        val inset = if (isPressed) size * 0.16f else size * 0.1f
+        rect.inset(inset, inset)
+        val (top, bottom) = if (isPressed) 0xFF1C1C20.toInt() to 0xFF3A3A40.toInt() else 0xFF55555C.toInt() to 0xFF1C1C20.toInt()
+        paint.shader = LinearGradient(0f, rect.top, 0f, rect.bottom, top, bottom, Shader.TileMode.CLAMP)
+        canvas.drawRoundRect(rect, size * 0.14f, size * 0.14f, paint)
+        paint.shader = null
     }
 }
 
