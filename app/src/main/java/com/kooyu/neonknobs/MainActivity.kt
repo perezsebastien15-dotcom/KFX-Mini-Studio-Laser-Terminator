@@ -11,6 +11,7 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Matrix
 import android.graphics.PixelFormat
+import android.graphics.RadialGradient
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Shader
@@ -48,6 +49,7 @@ class MainActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var configName: TextView
     private lateinit var wave: WaveOverlay
+    private lateinit var root: LinearLayout
     private val prefs by lazy { getPreferences(MODE_PRIVATE) }
 
     private val main = Handler(Looper.getMainLooper())
@@ -60,9 +62,8 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        val root = LinearLayout(this).apply {
+        root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = SynthwaveBackground()
             val p = (12 * resources.displayMetrics.density).toInt()
             setPadding(p, p / 2, p, p)
         }
@@ -91,6 +92,7 @@ class MainActivity : Activity() {
             }
             root.addView(line, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
         }
+        applyStyle(prefs.getBoolean("realistic", false))
         wave = WaveOverlay(this, root)
         setContentView(FrameLayout(this).apply { addView(root); addView(wave) })
         if (configs().length() == 0) saveConfig(currentConfig(), animate = false) // 1er lancement : l'état actuel devient "Défaut"
@@ -175,13 +177,24 @@ class MainActivity : Activity() {
         configName = pill("", KnobView.NEON[1]).apply { setOnClickListener { pickConfig(it) } }
         showConfigName()
         val save = pill("💾", KnobView.NEON[0]).apply { setOnClickListener { askSaveConfig() } }
+        val style = pill("🎨", KnobView.NEON[2]).apply { setOnClickListener { applyStyle(!knobs[0].realistic) } }
         return RgbBar(this).apply {
             setPadding(0, (8 * d).toInt(), 0, (8 * d).toInt())
             addView(configName)
             addView(save, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
             ).apply { marginStart = (10 * d).toInt() })
+            addView(style, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { marginStart = (10 * d).toInt() })
         }
+    }
+
+    /** Bascule néon / réaliste, mémorisé tout de suite. */
+    private fun applyStyle(realistic: Boolean) {
+        prefs.edit().putBoolean("realistic", realistic).apply()
+        root.background = if (realistic) PanelBackground() else SynthwaveBackground()
+        knobs.forEach { it.realistic = realistic }
     }
 
     private fun showConfigName() { configName.text = "${currentConfig()}  ▼" }
@@ -366,6 +379,41 @@ private class RgbBar(context: android.content.Context) : LinearLayout(context) {
         canvas.drawLine(box.right, y, width.toFloat(), y, line)
         postInvalidateOnAnimation()
     }
+}
+
+/** Fond façon façade de matériel studio : alu anthracite brossé + 4 vis. */
+private class PanelBackground : Drawable() {
+    private val fill = Paint()
+    private val brush = Paint().apply { strokeWidth = 1f }
+    private val screw = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val slot = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(200, 20, 20, 22); strokeCap = Paint.Cap.ROUND }
+
+    override fun draw(canvas: Canvas) {
+        val w = bounds.width().toFloat()
+        val h = bounds.height().toFloat()
+        fill.shader = LinearGradient(0f, 0f, 0f, h, 0xFF2E2F34.toInt(), 0xFF131416.toInt(), Shader.TileMode.CLAMP)
+        canvas.drawRect(bounds, fill)
+        val rnd = java.util.Random(7) // même grain à chaque dessin
+        var y = 0f
+        while (y < h) {
+            brush.color = Color.argb(4 + rnd.nextInt(10), 255, 255, 255)
+            canvas.drawLine(0f, y, w, y, brush)
+            y += 2f + rnd.nextInt(3)
+        }
+        val s = minOf(w, h) * 0.012f
+        slot.strokeWidth = s * 0.35f
+        for ((x, yy) in listOf(s * 2.5f to s * 2.5f, w - s * 2.5f to s * 2.5f, s * 2.5f to h - s * 2.5f, w - s * 2.5f to h - s * 2.5f)) {
+            screw.shader = RadialGradient(x - s * 0.3f, yy - s * 0.3f, s * 1.4f,
+                0xFFB8B8BE.toInt(), 0xFF3A3A40.toInt(), Shader.TileMode.CLAMP)
+            canvas.drawCircle(x, yy, s, screw)
+            canvas.drawLine(x - s * 0.6f, yy - s * 0.25f, x + s * 0.6f, yy + s * 0.25f, slot)
+        }
+    }
+
+    override fun setAlpha(alpha: Int) {}
+    override fun setColorFilter(colorFilter: ColorFilter?) {}
+    @Deprecated("Deprecated in Java")
+    override fun getOpacity() = PixelFormat.OPAQUE
 }
 
 /** Fond synthwave : dégradé coucher de soleil + grille en perspective. */

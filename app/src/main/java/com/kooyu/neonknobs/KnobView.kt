@@ -6,7 +6,10 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.RadialGradient
 import android.graphics.RectF
+import android.graphics.Shader
+import android.graphics.SweepGradient
 import android.graphics.Typeface
 import android.view.GestureDetector
 import android.view.MotionEvent
@@ -41,6 +44,9 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
         set(v) { field = v.coerceIn(0, 127); invalidate() }
     var color = initialColor
         set(v) { field = v; invalidate() }
+    /** false = style néon, true = style réaliste (potard métal + insert néon). */
+    var realistic = false
+        set(v) { field = v; invalidate() }
 
     var onValueChange: ((KnobView) -> Unit)? = null
     var onEdit: ((KnobView) -> Unit)? = null
@@ -58,6 +64,10 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
     private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
     private val glow = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
     private val body = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.parseColor("#1A0B2E") }
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
+    private val neonFont = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+    private val realFont = Typeface.create("sans-serif-condensed", Typeface.BOLD)
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
@@ -80,18 +90,15 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
 
     override fun onDraw(canvas: Canvas) {
         val c = if (rainbow < 0) color else Color.HSVToColor(floatArrayOf(rainbow * 720f % 360f, 1f, 1f))
+        if (realistic) return drawRealistic(canvas, c)
+        text.typeface = neonFont
         track.color = Color.argb(60, Color.red(c), Color.green(c), Color.blue(c))
         glow.color = c
         glow.setShadowLayer(12 * dp, 0f, 0f, c)
         text.color = if (rainbow < 0) Color.WHITE else c
         text.setShadowLayer(8 * dp, 0f, 0f, c)
 
-        val textSize = min(width, height) * 0.12f
-        text.textSize = textSize
-        cx = width / 2f
-        r = min(width * 0.8f, height - textSize * 3.2f) / 2f
-        cy = textSize * 1.6f + r
-        nameTop = cy + r
+        val textSize = layout()
         val stroke = r * 0.16f
         track.strokeWidth = stroke
         glow.strokeWidth = stroke
@@ -112,6 +119,107 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
             glow
         )
 
+        canvas.drawText(name, cx, cy + r + textSize * 1.3f, text)
+    }
+
+    /** Place le potard dans la vue, renvoie la taille du texte. */
+    private fun layout(): Float {
+        val textSize = min(width, height) * 0.12f
+        text.textSize = textSize
+        cx = width / 2f
+        r = min(width * 0.8f, height - textSize * 3.2f) / 2f
+        cy = textSize * 1.6f + r
+        nameTop = cy + r
+        return textSize
+    }
+
+    private fun mix(a: Int, b: Int, t: Float) = Color.rgb(
+        (Color.red(a) + (Color.red(b) - Color.red(a)) * t).toInt(),
+        (Color.green(a) + (Color.green(b) - Color.green(a)) * t).toInt(),
+        (Color.blue(a) + (Color.blue(b) - Color.blue(a)) * t).toInt(),
+    )
+
+    /** Potard façon matériel studio : graduations LED, jupe alu qui tourne, capuchon noir, insert néon lumineux. */
+    private fun drawRealistic(canvas: Canvas, c: Int) {
+        val textSize = layout()
+        val deg = 135f + 270f * value / 127f
+        val lit = if (rainbow < 0) value / 127f else rainbow
+
+        // graduations : allumées en néon jusqu'à la valeur
+        line.strokeWidth = r * 0.045f
+        for (i in 0..20) {
+            val f = i / 20f
+            val a = Math.toRadians(135.0 + 270.0 * f)
+            val on = f <= lit + 0.001f
+            line.color = if (on) c else Color.argb(90, 200, 200, 210)
+            if (on) line.setShadowLayer(6 * dp, 0f, 0f, c) else line.clearShadowLayer()
+            canvas.drawLine(
+                cx + (r * 0.86f * cos(a)).toFloat(), cy + (r * 0.86f * sin(a)).toFloat(),
+                cx + (r * 0.98f * cos(a)).toFloat(), cy + (r * 0.98f * sin(a)).toFloat(), line
+            )
+        }
+        line.clearShadowLayer()
+
+        // ombre portée puis jupe en alu brossé (dégradé conique qui tourne avec le potard)
+        val rs = r * 0.76f
+        fill.shader = null
+        fill.color = Color.BLACK
+        fill.setShadowLayer(r * 0.14f, 0f, r * 0.08f, Color.argb(200, 0, 0, 0))
+        canvas.drawCircle(cx, cy, rs, fill)
+        fill.clearShadowLayer()
+        canvas.save()
+        canvas.rotate(deg, cx, cy)
+        fill.shader = SweepGradient(cx, cy, intArrayOf(
+            0xFFD9D9DC.toInt(), 0xFF6B6B70.toInt(), 0xFFF2F2F4.toInt(), 0xFF55555A.toInt(),
+            0xFFD9D9DC.toInt(), 0xFF6B6B70.toInt(), 0xFFF2F2F4.toInt(), 0xFF55555A.toInt(), 0xFFD9D9DC.toInt(),
+        ), null)
+        canvas.drawCircle(cx, cy, rs, fill)
+        // moletage
+        line.strokeWidth = 1.2f * dp
+        line.color = Color.argb(80, 0, 0, 0)
+        for (i in 0 until 48) {
+            val a = Math.toRadians(i * 7.5)
+            canvas.drawLine(
+                cx + (rs * 0.88f * cos(a)).toFloat(), cy + (rs * 0.88f * sin(a)).toFloat(),
+                cx + (rs * cos(a)).toFloat(), cy + (rs * sin(a)).toFloat(), line
+            )
+        }
+        canvas.restore()
+
+        // capuchon noir laqué, lumière en haut à gauche
+        val rc = rs * 0.74f
+        fill.shader = RadialGradient(cx - rc * 0.35f, cy - rc * 0.35f, rc * 1.5f,
+            0xFF4A4A50.toInt(), 0xFF0C0C0F.toInt(), Shader.TileMode.CLAMP)
+        canvas.drawCircle(cx, cy, rc, fill)
+
+        // repère gravé noir sur la jupe
+        val a = Math.toRadians(deg.toDouble())
+        line.color = 0xFF111114.toInt()
+        line.strokeWidth = r * 0.07f
+        canvas.drawLine(
+            cx + (rc * 1.04f * cos(a)).toFloat(), cy + (rc * 1.04f * sin(a)).toFloat(),
+            cx + (rs * 0.95f * cos(a)).toFloat(), cy + (rs * 0.95f * sin(a)).toFloat(), line
+        )
+
+        // insert néon rétro-éclairé + reflet
+        val rn = rc * 0.62f
+        fill.shader = RadialGradient(cx, cy, rn, intArrayOf(mix(c, Color.WHITE, 0.55f), c, mix(c, Color.BLACK, 0.45f)),
+            floatArrayOf(0f, 0.6f, 1f), Shader.TileMode.CLAMP)
+        fill.setShadowLayer(r * 0.18f, 0f, 0f, c)
+        canvas.drawCircle(cx, cy, rn, fill)
+        fill.clearShadowLayer()
+        fill.shader = RadialGradient(cx - rn * 0.3f, cy - rn * 0.45f, rn * 0.6f,
+            Color.argb(110, 255, 255, 255), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+        canvas.drawCircle(cx, cy, rn, fill)
+        fill.shader = null
+
+        // textes façon sérigraphie
+        text.typeface = realFont
+        text.color = c
+        text.setShadowLayer(4 * dp, 0f, 0f, c)
+        canvas.drawText(value.toString(), cx, textSize * 1.1f, text)
+        text.color = if (rainbow < 0) 0xFFE6E6EA.toInt() else c
+        text.setShadowLayer(2 * dp, 0f, 1 * dp, Color.BLACK)
         canvas.drawText(name, cx, cy + r + textSize * 1.3f, text)
     }
 
