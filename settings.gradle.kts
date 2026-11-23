@@ -5,5 +5,5 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories { google(); mavenCentral() }
 }
-rootProject.name = "NeonKnobs"
+rootProject.name = "KooyuFX24"
 include(":app")

@@ -20,7 +20,7 @@ jobs:
           java-version: 17
           cache: gradle
       - run: ./gradlew --no-daemon assembleDebug
-      - run: cp app/build/outputs/apk/debug/app-debug.apk NeonKnobs.apk
-      - run: gh release create "v$APP_VERSION" NeonKnobs.apk --target "$GITHUB_SHA" --title "Neon Knobs $APP_VERSION" --generate-notes
+      - run: cp app/build/outputs/apk/debug/app-debug.apk KooyuFX24.apk
+      - run: gh release create "v$APP_VERSION" KooyuFX24.apk --target "$GITHUB_SHA" --title "KooyuFX 24 $APP_VERSION" --generate-notes
         env:
           GH_TOKEN: ${{ github.token }}
