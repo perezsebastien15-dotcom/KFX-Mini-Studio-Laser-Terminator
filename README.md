@@ -16,13 +16,13 @@ Installation : ouvrir le fichier sur la tablette, autoriser « sources inconnues
 4. Potards :
    - tourner le doigt autour = valeur (sens horaire = monte) ;
    - tap = nom + CC ;
-   - double tap sur le potard = couleur suivante (rose, cyan, jaune, vert, orange, rouge, bleu, violet) ;
+   - double tap sur le potard = couleur suivante (rose, cyan, jaune, vert, orange, rouge, bleu, violet, éteint) ;
    - double tap sur le nom = renommer.
 5. Barre du milieu : ▼ = choisir une config (chargée direct), 💾 = enregistrer sous un nom (même nom = écrase), 🎨 = style néon / réaliste.
    Une config garde noms, CC, couleurs et positions ; au chargement les positions ne sont pas envoyées au PC.
 6. Switch à gauche de chaque ligne = 2 banks par ligne, 24 CC assignables (témoin éteint = bank A, allumé = bank B). Rien n'est envoyé en MIDI à la bascule.
    - Ligne 1 : bank A = CC 20-25, bank B = CC 32-37. Ligne 2 : bank A = CC 26-31, bank B = CC 38-43.
-   - Chaque CC garde sa propre valeur et sa couleur ; le nom est commun aux 2 banks d'un potard.
+   - Chaque CC garde son nom, sa couleur et sa valeur (24 mémoires indépendantes).
 7. Tout est sauvegardé à la fermeture.
 
 ## Publier une nouvelle version

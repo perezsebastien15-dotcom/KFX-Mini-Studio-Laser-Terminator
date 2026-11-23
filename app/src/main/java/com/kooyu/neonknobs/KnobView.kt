@@ -30,10 +30,13 @@ import kotlin.math.sin
 class KnobView(context: Context, initialColor: Int) : View(context) {
 
     companion object {
-        /** Rose, cyan, jaune, vert, orange, rouge, bleu, violet. */
+        /** "Éteint" : gris sombre, le potard a l'air coupé. */
+        const val ETEINT = 0xFF3A3A42.toInt()
+
+        /** Rose, cyan, jaune, vert, orange, rouge, bleu, violet, éteint (ordre du double tap). */
         val NEON = intArrayOf(
             0xFFFF2E97.toInt(), 0xFF00F0FF.toInt(), 0xFFFFF01F.toInt(), 0xFF39FF14.toInt(),
-            0xFFFF8C00.toInt(), 0xFFFF073A.toInt(), 0xFF1F51FF.toInt(), 0xFFBC13FE.toInt(),
+            0xFFFF8C00.toInt(), 0xFFFF073A.toInt(), 0xFF1F51FF.toInt(), 0xFFBC13FE.toInt(), ETEINT,
         )
     }
 
@@ -215,7 +218,7 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
 
         // textes façon sérigraphie
         text.typeface = realFont
-        text.color = c
+        text.color = if (c == ETEINT) Color.GRAY else c // sinon la valeur disparaît sur la façade sombre
         text.setShadowLayer(4 * dp, 0f, 0f, c)
         canvas.drawText(value.toString(), cx, textSize * 1.1f, text)
         text.color = if (rainbow < 0) 0xFFE6E6EA.toInt() else c
