@@ -18,7 +18,7 @@ Installation : ouvrir le fichier sur la tablette, autoriser « sources inconnues
    - tap = nom + CC ;
    - double tap sur le potard = couleur suivante (rose, cyan, jaune, vert, orange, rouge, bleu, violet) ;
    - double tap sur le nom = renommer.
-5. Configs (barre au milieu) : ▼ = choisir une config (chargée direct), 💾 = enregistrer sous un nom (même nom = écrase).
+5. Barre du milieu : ▼ = choisir une config (chargée direct), 💾 = enregistrer sous un nom (même nom = écrase), 🎨 = style néon / réaliste.
    Une config garde noms, CC, couleurs et positions ; au chargement les positions ne sont pas envoyées au PC.
 6. Tout est sauvegardé à la fermeture.
 
