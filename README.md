@@ -1,4 +1,4 @@
-# KFX — Kooyu FX Mini Studio Laser Terminator
+# KFX Terminator Pro
 
 Contrôleur MIDI USB Android pour Cakewalk, fait pour Kooyu : 12 potards × 2 banks = 24 CC assignables (CC 20 à 43, canal 1), style néon ou réaliste.
 
@@ -14,15 +14,14 @@ Installation : ouvrir le fichier sur la tablette, autoriser « sources inconnues
 2. Le PC voit « Android USB Peripheral Port » (rien à installer).
 3. Cakewalk : Préférences → MIDI → Devices → cocher le port en entrée, puis assigner les potards.
 4. Potards :
-   - tourner le doigt autour = valeur (sens horaire = monte) ;
-   - tap = nom + CC ;
-   - double tap sur le potard = couleur suivante (rose, cyan, jaune, vert, orange, rouge, bleu, violet, éteint) ;
-   - double tap sur le nom = renommer.
-5. Barre du milieu : ▼ = choisir une config (chargée direct), 💾 = enregistrer sous un nom (même nom = écrase), 🎨 = style néon / réaliste.
+   - double tap = réglages : nom, CC, couleur (rose, cyan, jaune, vert, orange, rouge, bleu, violet, éteint), type knob ou switch ;
+   - knob : tourner le doigt autour = valeur (sens horaire = monte) ;
+   - switch : tap = OFF (0, couleur éteint) ↔ ON (127, couleur choisie).
+5. Ovale du milieu = nom du preset : tap = choisir un preset (chargé direct), double tap = menu 💾 enregistrer sous un nom (même nom = écrase) / 🎨 thème néon ou réaliste.
    Une config garde noms, CC, couleurs et positions ; au chargement les positions ne sont pas envoyées au PC.
 6. Switch à gauche de chaque ligne = 2 banks par ligne, 24 CC assignables (témoin éteint = bank A, allumé = bank B). Rien n'est envoyé en MIDI à la bascule.
    - Ligne 1 : bank A = CC 20-25, bank B = CC 32-37. Ligne 2 : bank A = CC 26-31, bank B = CC 38-43.
-   - Chaque CC garde son nom, sa couleur et sa valeur (24 mémoires indépendantes).
+   - Chaque CC garde son nom, sa couleur, son type et sa valeur (24 mémoires indépendantes).
 7. Tout est sauvegardé à la fermeture.
 
 ## Publier une nouvelle version
