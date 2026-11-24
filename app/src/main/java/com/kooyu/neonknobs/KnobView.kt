@@ -24,7 +24,7 @@ import kotlin.math.sin
 
 /**
  * Gros potard néon.
- * Tourner le doigt autour = valeur · tap = nom/CC · double tap potard = couleur · double tap nom = renommer.
+ * Knob : tourner le doigt autour = valeur. Switch : tap = 0 ↔ 127. Double tap = réglages du potard.
  */
 @SuppressLint("ViewConstructor")
 class KnobView(context: Context, initialColor: Int) : View(context) {
@@ -33,7 +33,7 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
         /** "Éteint" : gris sombre, le potard a l'air coupé. */
         const val ETEINT = 0xFF3A3A42.toInt()
 
-        /** Rose, cyan, jaune, vert, orange, rouge, bleu, violet, éteint (ordre du double tap). */
+        /** Rose, cyan, jaune, vert, orange, rouge, bleu, violet, éteint. */
         val NEON = intArrayOf(
             0xFFFF2E97.toInt(), 0xFF00F0FF.toInt(), 0xFFFFF01F.toInt(), 0xFF39FF14.toInt(),
             0xFFFF8C00.toInt(), 0xFFFF073A.toInt(), 0xFF1F51FF.toInt(), 0xFFBC13FE.toInt(), ETEINT,
@@ -47,13 +47,16 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
         set(v) { field = v.coerceIn(0, 127); invalidate() }
     var color = initialColor
         set(v) { field = v; invalidate() }
+    /** true = switch : 0 (couleur éteint) ou 127 (couleur choisie), au tap. */
+    var isSwitch = false
+        set(v) { field = v; invalidate() }
+    private val on get() = value >= 64
     /** false = style néon, true = style réaliste (potard métal + insert néon). */
     var realistic = false
         set(v) { field = v; invalidate() }
 
     var onValueChange: ((KnobView) -> Unit)? = null
     var onEdit: ((KnobView) -> Unit)? = null
-    var onRename: ((KnobView) -> Unit)? = null
 
     private val dp = resources.displayMetrics.density
     private val slop = ViewConfiguration.get(context).scaledTouchSlop
@@ -61,7 +64,6 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
     private var cx = 0f
     private var cy = 0f
     private var r = 0f
-    private var nameTop = 0f
     private var rainbow = -1f // progression 0..1 de l'anim arc-en-ciel, -1 = éteinte
 
     private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND }
@@ -92,7 +94,8 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
     }
 
     override fun onDraw(canvas: Canvas) {
-        val c = if (rainbow < 0) color else Color.HSVToColor(floatArrayOf(rainbow * 720f % 360f, 1f, 1f))
+        val c = if (rainbow >= 0) Color.HSVToColor(floatArrayOf(rainbow * 720f % 360f, 1f, 1f))
+            else if (isSwitch && !on) ETEINT else color
         if (realistic) return drawRealistic(canvas, c)
         text.typeface = neonFont
         track.color = Color.argb(60, Color.red(c), Color.green(c), Color.blue(c))
@@ -106,21 +109,25 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
         track.strokeWidth = stroke
         glow.strokeWidth = stroke
 
-        canvas.drawText(value.toString(), cx, textSize * 1.1f, text)
+        canvas.drawText(label(), cx, textSize * 1.1f, text)
 
         arc.set(cx - r + stroke, cy - r + stroke, cx + r - stroke, cy + r - stroke)
         canvas.drawArc(arc, 135f, 270f, false, track)
         // pendant l'arc-en-ciel l'arc fait un tour complet, sinon il suit la valeur
-        canvas.drawArc(arc, 135f, if (rainbow < 0) 270f * value / 127f else 270f * rainbow, false, glow)
+        // switch : anneau plein, éteint ou allumé
+        canvas.drawArc(arc, 135f, if (rainbow >= 0) 270f * rainbow else if (isSwitch) 270f else 270f * value / 127f, false, glow)
 
         val inner = r - stroke * 2f
         canvas.drawCircle(cx, cy, inner, body)
-        val a = Math.toRadians(135.0 + 270.0 * value / 127.0)
-        canvas.drawLine(
-            cx, cy,
-            cx + (inner * 0.85f * cos(a)).toFloat(), cy + (inner * 0.85f * sin(a)).toFloat(),
-            glow
-        )
+        if (isSwitch) canvas.drawCircle(cx, cy, inner * 0.45f, glow) // switch : un anneau au lieu de l'aiguille
+        else {
+            val a = Math.toRadians(135.0 + 270.0 * value / 127.0)
+            canvas.drawLine(
+                cx, cy,
+                cx + (inner * 0.85f * cos(a)).toFloat(), cy + (inner * 0.85f * sin(a)).toFloat(),
+                glow
+            )
+        }
 
         canvas.drawText(name, cx, cy + r + textSize * 1.3f, text)
     }
@@ -132,9 +139,10 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
         cx = width / 2f
         r = min(width * 0.8f, height - textSize * 3.2f) / 2f
         cy = textSize * 1.6f + r
-        nameTop = cy + r
         return textSize
     }
+
+    private fun label() = if (isSwitch) (if (on) "ON" else "OFF") else value.toString()
 
     private fun mix(a: Int, b: Int, t: Float) = Color.rgb(
         (Color.red(a) + (Color.red(b) - Color.red(a)) * t).toInt(),
@@ -145,8 +153,8 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
     /** Potard façon matériel studio : graduations LED, jupe alu qui tourne, capuchon noir, insert néon lumineux. */
     private fun drawRealistic(canvas: Canvas, c: Int) {
         val textSize = layout()
-        val deg = 135f + 270f * value / 127f
-        val lit = if (rainbow < 0) value / 127f else rainbow
+        val deg = if (isSwitch) 270f else 135f + 270f * value / 127f // switch : repère fixe en haut
+        val lit = if (rainbow >= 0) rainbow else if (isSwitch) 1f else value / 127f
 
         // graduations : allumées en néon jusqu'à la valeur
         line.strokeWidth = r * 0.045f
@@ -195,11 +203,11 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
             0xFF4A4A50.toInt(), 0xFF0C0C0F.toInt(), Shader.TileMode.CLAMP)
         canvas.drawCircle(cx, cy, rc, fill)
 
-        // repère gravé noir sur la jupe
+        // repère gravé noir sur la jupe (pas sur un switch)
         val a = Math.toRadians(deg.toDouble())
         line.color = 0xFF111114.toInt()
         line.strokeWidth = r * 0.07f
-        canvas.drawLine(
+        if (!isSwitch) canvas.drawLine(
             cx + (rc * 1.04f * cos(a)).toFloat(), cy + (rc * 1.04f * sin(a)).toFloat(),
             cx + (rs * 0.95f * cos(a)).toFloat(), cy + (rs * 0.95f * sin(a)).toFloat(), line
         )
@@ -220,7 +228,7 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
         text.typeface = realFont
         text.color = if (c == ETEINT) Color.GRAY else c // sinon la valeur disparaît sur la façade sombre
         text.setShadowLayer(4 * dp, 0f, 0f, c)
-        canvas.drawText(value.toString(), cx, textSize * 1.1f, text)
+        canvas.drawText(label(), cx, textSize * 1.1f, text)
         text.color = if (rainbow < 0) 0xFFE6E6EA.toInt() else c
         text.setShadowLayer(2 * dp, 0f, 1 * dp, Color.BLACK)
         canvas.drawText(name, cx, cy + r + textSize * 1.3f, text)
@@ -228,12 +236,12 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
 
     private val gestures = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
         override fun onDown(e: MotionEvent) = true
-        override fun onSingleTapConfirmed(e: MotionEvent) = performClick()
-        override fun onDoubleTap(e: MotionEvent): Boolean {
-            if (e.y > nameTop) onRename?.invoke(this@KnobView)
-            else color = NEON[(NEON.indexOf(color) + 1) % NEON.size]
+        // confirmé = on attend de savoir que ce n'est pas un double tap (~300 ms)
+        override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
+            if (isSwitch) { value = if (on) 0 else 127; onValueChange?.invoke(this@KnobView) }
             return true
         }
+        override fun onDoubleTap(e: MotionEvent) = performClick()
     }).apply { setIsLongpressEnabled(false) }
 
     private var downX = 0f
@@ -256,7 +264,7 @@ class KnobView(context: Context, initialColor: Int) : View(context) {
                 if (!dragging && hypot(e.x - downX, e.y - downY) > slop) dragging = true
                 val a = angle(e)
                 // près du centre l'angle part en vrille : on suit le doigt sans changer la valeur
-                if (dragging && hypot(e.x - cx, e.y - cy) > r * 0.25f) {
+                if (dragging && !isSwitch && hypot(e.x - cx, e.y - cy) > r * 0.25f) {
                     var d = a - lastAngle
                     if (d > 180) d -= 360 else if (d < -180) d += 360
                     acc = (acc + d * 127f / 270f).coerceIn(0f, 127f) // 270° de course = 0→127, sens horaire = monte

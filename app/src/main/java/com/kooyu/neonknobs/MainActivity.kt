@@ -9,7 +9,6 @@ import android.graphics.Color
 import android.graphics.ColorFilter
 import android.graphics.LinearGradient
 import android.graphics.Paint
-import android.graphics.Matrix
 import android.graphics.PixelFormat
 import android.graphics.RadialGradient
 import android.graphics.Rect
@@ -25,7 +24,6 @@ import android.media.midi.MidiManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.SystemClock
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
@@ -33,7 +31,11 @@ import android.view.WindowManager
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.ArrayAdapter
 import android.widget.PopupMenu
+import android.widget.RadioButton
+import android.widget.RadioGroup
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import org.json.JSONArray
@@ -46,8 +48,8 @@ import kotlin.math.sin
 class MainActivity : Activity() {
 
     private val knobs = mutableListOf<KnobView>()
-    // 2 banks par ligne, 24 mémoires {n, cc, c, v} : 0-11 = bank A / switch OFF (CC 20-31), 12-23 = bank B / switch ON (CC 32-43).
-    // Nom, CC, valeur et couleur sont propres à chaque mémoire (chaque CC a les siens).
+    // 2 banks par ligne, 24 mémoires {n, cc, c, v, t (0 = knob, 1 = switch)} : 0-11 = bank A / switch OFF (CC 20-31), 12-23 = bank B / switch ON (CC 32-43).
+    // Nom, CC, valeur, couleur et type sont propres à chaque mémoire (chaque CC a les siens).
     private val slots = Array(24) { JSONObject() }
     private val switchOn = BooleanArray(2)
     private val switches = mutableListOf<RowSwitch>()
@@ -73,12 +75,14 @@ class MainActivity : Activity() {
             setPadding(p, p / 2, p, p)
         }
         root.addView(TextView(this).apply {
-            text = "Kooyu FX Mini Studio Laser Terminator"
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            text = "KFX Terminator Pro"
+            typeface = Typeface.createFromAsset(assets, "monoton.ttf") // police Monoton, licence OFL (assets/monoton-OFL.txt)
             gravity = Gravity.CENTER
-            textSize = 20f
-            letterSpacing = 0.08f
+            textSize = 26f
             setTextColor(Color.WHITE)
+            // dégradé coucher de soleil jaune → rose → violet sur la hauteur du texte, halo rose
+            paint.shader = LinearGradient(0f, 0f, 0f, lineHeight.toFloat(),
+                intArrayOf(0xFFFFF01F.toInt(), 0xFFFF2E97.toInt(), 0xFFBC13FE.toInt()), null, Shader.TileMode.CLAMP)
             setShadowLayer(10 * resources.displayMetrics.density, 0f, 0f, KnobView.NEON[0])
         })
         status = TextView(this).apply {
@@ -95,6 +99,7 @@ class MainActivity : Activity() {
                 .put("cc", prefs.getInt("cc$j", 20 + j)) // OFF : potard 1 = CC 20 … 12 = CC 31 · ON : potard 1 = CC 32 … 12 = CC 43
                 .put("c", prefs.getInt("col$j", KnobView.NEON[k / 6]))
                 .put("v", prefs.getInt("val$j", 0))
+                .put("t", prefs.getInt("type$j", 0))
         }
         for (row in 0..1) {
             switchOn[row] = prefs.getBoolean("sw$row", false)
@@ -110,8 +115,7 @@ class MainActivity : Activity() {
             for (col in 0..5) {
                 val knob = KnobView(this, KnobView.NEON[row]).apply {
                     onValueChange = { sendCc(it.cc, it.value) }
-                    onEdit = { editKnob(it, withCc = true) }
-                    onRename = { editKnob(it, withCc = false) }
+                    onEdit = ::editKnob
                 }
                 knobs += knob
                 line.addView(knob, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
@@ -143,7 +147,7 @@ class MainActivity : Activity() {
         prefs.edit().apply {
             slots.forEachIndexed { j, o ->
                 putString("name$j", o.getString("n")); putInt("cc$j", o.getInt("cc"))
-                putInt("val$j", o.getInt("v")); putInt("col$j", o.getInt("c"))
+                putInt("val$j", o.getInt("v")); putInt("col$j", o.getInt("c")); putInt("type$j", o.optInt("t"))
             }
             putBoolean("sw0", switchOn[0]); putBoolean("sw1", switchOn[1])
         }.apply()
@@ -157,12 +161,16 @@ class MainActivity : Activity() {
     private fun store(k: Int) {
         val v = knobs[k]
         slots[slotOf(k)] = JSONObject().put("n", v.name).put("cc", v.cc).put("c", v.color).put("v", v.value)
+            .put("t", if (v.isSwitch) 1 else 0)
     }
 
-    /** Nom, CC, valeur et couleur de la bank active. */
+    /** Nom, CC, valeur, couleur et type de la bank active. */
     private fun show(k: Int) {
         val o = slots[slotOf(k)]
-        knobs[k].apply { name = o.getString("n"); cc = o.getInt("cc"); color = o.getInt("c"); value = o.getInt("v") }
+        knobs[k].apply {
+            name = o.getString("n"); cc = o.getInt("cc"); color = o.getInt("c"); value = o.getInt("v")
+            isSwitch = o.optInt("t") == 1 // les configs d'avant n'ont pas de type : knob
+        }
     }
 
     /** Interne à l'appli : bascule la ligne de bank (CC + valeurs), rien n'est envoyé en MIDI. */
@@ -182,16 +190,36 @@ class MainActivity : Activity() {
 
     // ---------- Réglages ----------
 
-    private fun editKnob(k: KnobView, withCc: Boolean) {
+    /** Réglages du potard (double tap) : nom, CC, couleur, type. */
+    private fun editKnob(k: KnobView) {
         val nameField = EditText(this).apply { setText(k.name); hint = "Nom"; setSingleLine(); selectAll() }
         val ccField = EditText(this).apply {
             setText(k.cc.toString()); hint = "CC (0-127)"; inputType = InputType.TYPE_CLASS_NUMBER
+        }
+        val colorNames = listOf("Rose", "Cyan", "Jaune", "Vert", "Orange", "Rouge", "Bleu", "Violet", "Éteint")
+        val colorPick = Spinner(this).apply {
+            adapter = object : ArrayAdapter<String>(this@MainActivity, android.R.layout.simple_spinner_item, colorNames.map { "●  $it" }) {
+                override fun getView(pos: Int, v: View?, parent: android.view.ViewGroup) = tint(super.getView(pos, v, parent), pos)
+                override fun getDropDownView(pos: Int, v: View?, parent: android.view.ViewGroup) = tint(super.getDropDownView(pos, v, parent), pos)
+                // "éteint" en gris lisible, sinon il disparaît sur le fond sombre
+                private fun tint(v: View, pos: Int) = v.apply {
+                    (this as TextView).setTextColor(if (KnobView.NEON[pos] == KnobView.ETEINT) Color.GRAY else KnobView.NEON[pos])
+                }
+            }.apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+            setSelection(KnobView.NEON.indexOf(k.color).coerceAtLeast(0))
+        }
+        val knobBtn = RadioButton(this).apply { text = "Knob"; id = View.generateViewId() }
+        val switchBtn = RadioButton(this).apply { text = "Switch"; id = View.generateViewId() }
+        val typePick = RadioGroup(this).apply {
+            orientation = RadioGroup.HORIZONTAL
+            addView(knobBtn); addView(switchBtn)
+            check(if (k.isSwitch) switchBtn.id else knobBtn.id)
         }
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             val p = (20 * resources.displayMetrics.density).toInt()
             setPadding(p, p / 2, p, 0)
-            addView(nameField); if (withCc) addView(ccField)
+            addView(nameField); addView(ccField); addView(colorPick); addView(typePick)
         }
         AlertDialog.Builder(this, android.R.style.Theme_Material_Dialog_Alert)
             .setTitle("Potard ${knobs.indexOf(k) + 1}" + if (switchOn[knobs.indexOf(k) / 6]) " · bank B" else " · bank A")
@@ -204,6 +232,11 @@ class MainActivity : Activity() {
                 }
                 k.name = nameField.text.toString().trim().ifEmpty { k.name }
                 k.cc = cc
+                k.color = KnobView.NEON[colorPick.selectedItemPosition]
+                val toSwitch = switchBtn.isChecked
+                // passage en switch : on cale la valeur sur 0/127 pour que l'écran dise la même chose que le PC (rien n'est envoyé)
+                if (toSwitch && !k.isSwitch) k.value = if (k.value >= 64) 127 else 0
+                k.isSwitch = toSwitch
                 k.playRainbow()
             }
             .setNegativeButton("Annuler", null)
@@ -233,7 +266,7 @@ class MainActivity : Activity() {
         showConfigName()
         val save = pill("💾", KnobView.NEON[0]).apply { setOnClickListener { askSaveConfig() } }
         val style = pill("🎨", KnobView.NEON[2]).apply { setOnClickListener { applyStyle(!knobs[0].realistic) } }
-        return RgbBar(this).apply {
+        return LineBar(this).apply {
             setPadding(0, (8 * d).toInt(), 0, (8 * d).toInt())
             addView(configName)
             addView(save, LinearLayout.LayoutParams(
@@ -404,19 +437,13 @@ private class WaveOverlay(context: android.content.Context, private val target: 
     }
 }
 
-/** Ligne RVB animée de bord à bord, qui fait le tour de la zone nom de config + sauvegarde. */
-private class RgbBar(context: android.content.Context) : LinearLayout(context) {
+/** Ligne blanche de bord à bord, qui fait le tour de la zone nom de config + sauvegarde. */
+private class LineBar(context: android.content.Context) : LinearLayout(context) {
     private val dp = resources.displayMetrics.density
-    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 2 * dp }
-    private val shift = Matrix()
+    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 1.5f * dp; color = Color.WHITE }
     private val box = RectF()
 
     init { gravity = Gravity.CENTER; setWillNotDraw(false) }
-
-    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
-        line.shader = LinearGradient(0f, 0f, w.toFloat(), 0f,
-            intArrayOf(Color.RED, Color.GREEN, Color.BLUE, Color.RED), null, Shader.TileMode.REPEAT)
-    }
 
     override fun onDraw(canvas: Canvas) {
         if (childCount == 0) return
@@ -424,13 +451,10 @@ private class RgbBar(context: android.content.Context) : LinearLayout(context) {
         val last = getChildAt(childCount - 1)
         box.set(first.left.toFloat(), first.top.toFloat(), last.right.toFloat(), last.bottom.toFloat())
         box.inset(-10 * dp, -5 * dp)
-        shift.setTranslate(SystemClock.uptimeMillis() % 4000 / 4000f * width, 0f) // le dégradé défile : 1 tour en 4 s
-        line.shader?.setLocalMatrix(shift)
         val y = height / 2f
         canvas.drawLine(0f, y, box.left, y, line)
         canvas.drawRoundRect(box, box.height() / 2, box.height() / 2, line)
         canvas.drawLine(box.right, y, width.toFloat(), y, line)
-        postInvalidateOnAnimation()
     }
 }
 
