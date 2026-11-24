@@ -17,7 +17,7 @@ Installation : ouvrir le fichier sur la tablette, autoriser « sources inconnues
    - double tap = réglages : nom, CC, couleur (rose, cyan, jaune, vert, orange, rouge, bleu, violet, éteint), type knob ou switch ;
    - knob : tourner le doigt autour = valeur (sens horaire = monte) ;
    - switch : tap = OFF (0, couleur éteint) ↔ ON (127, couleur choisie).
-5. Barre du milieu : ▼ = choisir une config (chargée direct), 💾 = enregistrer sous un nom (même nom = écrase), 🎨 = style néon / réaliste.
+5. Ovale du milieu = nom du preset : tap = choisir un preset (chargé direct), double tap = menu 💾 enregistrer sous un nom (même nom = écrase) / 🎨 thème néon ou réaliste.
    Une config garde noms, CC, couleurs et positions ; au chargement les positions ne sont pas envoyées au PC.
 6. Switch à gauche de chaque ligne = 2 banks par ligne, 24 CC assignables (témoin éteint = bank A, allumé = bank B). Rien n'est envoyé en MIDI à la bascule.
    - Ligne 1 : bank A = CC 20-25, bank B = CC 32-37. Ligne 2 : bank A = CC 26-31, bank B = CC 38-43.

@@ -1,5 +1,6 @@
 package com.kooyu.neonknobs
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.AlertDialog
 import android.animation.ValueAnimator
@@ -25,7 +26,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
+import android.view.GestureDetector
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.EditText
@@ -249,6 +252,7 @@ class MainActivity : Activity() {
     private fun configs() = JSONObject(prefs.getString("configs", null) ?: "{}")
     private fun currentConfig() = prefs.getString("current", null) ?: "Défaut"
 
+    @SuppressLint("ClickableViewAccessibility") // pas de clic simple : tap et double tap gérés par le GestureDetector
     private fun configBar(): View {
         val d = resources.displayMetrics.density
         fun pill(t: String, neon: Int) = TextView(this).apply {
@@ -262,19 +266,18 @@ class MainActivity : Activity() {
                 setColor(Color.parseColor("#CC1A0B2E")); cornerRadius = 40 * d
             }
         }
-        configName = pill("", KnobView.NEON[1]).apply { setOnClickListener { pickConfig(it) } }
+        // tap = choisir un preset · double tap = menu enregistrer / thème
+        configName = pill("", KnobView.NEON[1])
+        val gestures = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDown(e: MotionEvent) = true
+            override fun onSingleTapConfirmed(e: MotionEvent) = true.also { pickConfig(configName) }
+            override fun onDoubleTap(e: MotionEvent) = true.also { presetMenu(configName) }
+        })
+        configName.setOnTouchListener { _, e -> gestures.onTouchEvent(e) }
         showConfigName()
-        val save = pill("💾", KnobView.NEON[0]).apply { setOnClickListener { askSaveConfig() } }
-        val style = pill("🎨", KnobView.NEON[2]).apply { setOnClickListener { applyStyle(!knobs[0].realistic) } }
         return LineBar(this).apply {
             setPadding(0, (8 * d).toInt(), 0, (8 * d).toInt())
             addView(configName)
-            addView(save, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { marginStart = (10 * d).toInt() })
-            addView(style, LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { marginStart = (10 * d).toInt() })
         }
     }
 
@@ -285,7 +288,16 @@ class MainActivity : Activity() {
         knobs.forEach { it.realistic = realistic }
     }
 
-    private fun showConfigName() { configName.text = "${currentConfig()}  ▼" }
+    private fun showConfigName() { configName.text = currentConfig() }
+
+    private fun presetMenu(anchor: View) {
+        PopupMenu(this, anchor).apply {
+            menu.add("💾  Enregistrer le preset").setOnMenuItemClickListener { askSaveConfig(); true }
+            menu.add(if (knobs[0].realistic) "🎨  Thème néon" else "🎨  Thème réaliste")
+                .setOnMenuItemClickListener { applyStyle(!knobs[0].realistic); true }
+            show()
+        }
+    }
 
     private fun pickConfig(anchor: View) {
         val names = configs().keys().asSequence().sortedBy { it.lowercase() }.toList()
