@@ -56,7 +56,7 @@ class MainActivity : Activity() {
     private val slots = Array(24) { JSONObject() }
     private val switchOn = BooleanArray(2)
     private val switches = mutableListOf<RowSwitch>()
-    private lateinit var status: TextView
+    private lateinit var title: TextView
     private lateinit var configName: TextView
     private lateinit var wave: WaveOverlay
     private lateinit var root: LinearLayout
@@ -77,23 +77,15 @@ class MainActivity : Activity() {
             val p = (12 * resources.displayMetrics.density).toInt()
             setPadding(p, p / 2, p, p)
         }
-        root.addView(TextView(this).apply {
+        // le titre sert de voyant MIDI : néons allumés = connecté, éteints = pas de port (voir updateStatus)
+        title = TextView(this).apply {
             text = "KFX Terminator Pro"
             typeface = Typeface.createFromAsset(assets, "monoton.ttf") // police Monoton, licence OFL (assets/monoton-OFL.txt)
             gravity = Gravity.CENTER
             textSize = 26f
             setTextColor(Color.WHITE)
-            // dégradé coucher de soleil jaune → rose → violet sur la hauteur du texte, halo rose
-            paint.shader = LinearGradient(0f, 0f, 0f, lineHeight.toFloat(),
-                intArrayOf(0xFFFFF01F.toInt(), 0xFFFF2E97.toInt(), 0xFFBC13FE.toInt()), null, Shader.TileMode.CLAMP)
-            setShadowLayer(10 * resources.displayMetrics.density, 0f, 0f, KnobView.NEON[0])
-        })
-        status = TextView(this).apply {
-            typeface = Typeface.MONOSPACE
-            gravity = Gravity.CENTER
-            textSize = 14f
         }
-        root.addView(status)
+        root.addView(title)
 
         for (j in 0 until 24) {
             val k = j % 12
@@ -394,8 +386,14 @@ class MainActivity : Activity() {
 
     private fun updateStatus(error: String? = null) {
         val ok = port != null
-        status.text = error ?: if (ok) "● USB MIDI connecté" else "○ USB MIDI déconnecté — branche le PC et choisis USB : MIDI"
-        status.setTextColor(if (ok) Color.parseColor("#39FF14") else Color.parseColor("#FFB000"))
+        // allumé : dégradé coucher de soleil jaune → rose → violet + halo rose · éteint : tubes gris sombre, sans halo
+        val tubes = if (ok) intArrayOf(0xFFFFF01F.toInt(), 0xFFFF2E97.toInt(), 0xFFBC13FE.toInt())
+            else intArrayOf(0xFF7A7484.toInt(), 0xFF625C6C.toInt(), 0xFF4E4858.toInt())
+        title.paint.shader = LinearGradient(0f, 0f, 0f, title.lineHeight.toFloat(), tubes, null, Shader.TileMode.CLAMP)
+        if (ok) title.setShadowLayer(10 * resources.displayMetrics.density, 0f, 0f, KnobView.NEON[0])
+        else title.setShadowLayer(0f, 0f, 0f, 0)
+        title.contentDescription = "KFX Terminator Pro · " + (error ?: if (ok) "USB MIDI connecté" else "USB MIDI déconnecté")
+        title.invalidate()
     }
 }
 
