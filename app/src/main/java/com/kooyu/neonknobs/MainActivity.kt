@@ -88,10 +88,10 @@ class MainActivity : Activity() {
                 intArrayOf(0xFFFFF01F.toInt(), 0xFFFF2E97.toInt(), 0xFFBC13FE.toInt()), null, Shader.TileMode.CLAMP)
             setShadowLayer(10 * resources.displayMetrics.density, 0f, 0f, KnobView.NEON[0])
         })
-        status = TextView(this).apply {
-            typeface = Typeface.MONOSPACE
+        status = TextView(this).apply { // voyant MIDI : vert = connecté, rouge = pas de port
+            text = "●"
             gravity = Gravity.CENTER
-            textSize = 14f
+            textSize = 16f
         }
         root.addView(status)
 
@@ -394,8 +394,10 @@ class MainActivity : Activity() {
 
     private fun updateStatus(error: String? = null) {
         val ok = port != null
-        status.text = error ?: if (ok) "● USB MIDI connecté" else "○ USB MIDI déconnecté — branche le PC et choisis USB : MIDI"
-        status.setTextColor(if (ok) Color.parseColor("#39FF14") else Color.parseColor("#FFB000"))
+        val c = if (ok) 0xFF39FF14.toInt() else 0xFFFF1744.toInt()
+        status.setTextColor(c)
+        status.setShadowLayer(8 * resources.displayMetrics.density, 0f, 0f, c)
+        status.contentDescription = error ?: if (ok) "USB MIDI connecté" else "USB MIDI déconnecté"
     }
 }
 

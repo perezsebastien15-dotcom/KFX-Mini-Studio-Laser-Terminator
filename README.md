@@ -11,7 +11,7 @@ Installation : ouvrir le fichier sur la tablette, autoriser « sources inconnues
 ## Utilisation
 
 1. Brancher la tablette au PC en USB, notification USB → **MIDI**.
-2. Le PC voit « Android USB Peripheral Port » (rien à installer).
+2. Le PC voit « Android USB Peripheral Port » (rien à installer). Le voyant sous le titre passe du rouge au vert.
 3. Cakewalk : Préférences → MIDI → Devices → cocher le port en entrée, puis assigner les potards.
 4. Potards :
    - double tap = réglages : nom, CC, couleur (rose, cyan, jaune, vert, orange, rouge, bleu, violet, éteint), type knob ou switch ;
